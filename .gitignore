@@ -5,3 +5,4 @@
 infrastructure/volumes/**
 .vscode/**
 **/.mvn/**
+**/*.class
