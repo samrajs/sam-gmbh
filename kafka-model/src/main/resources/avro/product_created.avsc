@@ -1,0 +1,65 @@
+{
+    "namespace": "com.sam.infrastructure.kafka.system.product.avro.model",
+    "type": "record",
+    "name": "ProductCreatedAvroModel",
+    "fields": [
+        {
+            "name": "id",
+            "type": {
+                "type": "string",
+                "logicalType": "uuid"
+            }
+        },
+        {
+            "name": "sagaId",
+            "type": {
+                "type": "string",
+                "logicalType": "uuid"
+            }
+        },
+        {
+            "name": "name",
+            "type": {
+                "type": "string"
+            }
+        },        
+        {
+            "name": "description",
+            "type": {
+                "type": "string"
+            }
+        },        
+        {
+            "name": "price",
+            "type": {
+                "type": "bytes",
+                "logicalType": "decimal",
+                "precision": 10,
+                "scale": 2
+            }
+        },
+        {
+            "name": "createdAt",
+            "type": {
+                "type": "long",
+                "logicalType": "timestamp-millis"
+            }
+        },
+        {
+            "name": "productStatus",
+            "type": {
+                  "type": "enum",
+                  "name": "ProductStatus",
+                  "symbols": ["PENDING", "AVAILABLE", "PHASING_OUT", "NOT_AVAILABLE"]
+               }
+        },
+        {
+            "name": "productCategory",
+            "type": {
+                  "type": "enum",
+                  "name": "ProductCategory",
+                  "symbols": ["ELECTRONIC", "SPORTS", "HOME_APPLIANCES"]
+               }
+        }
+    ]
+}

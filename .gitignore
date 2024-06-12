@@ -1,0 +1,7 @@
+.classpath
+.project
+.settings/
+**/target/**
+infrastructure/volumes/**
+.vscode/**
+**/.mvn/**

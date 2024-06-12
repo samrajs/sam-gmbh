@@ -1,0 +1,172 @@
+version: '3.7'
+services:
+  zookeeper:
+    image: confluentinc/cp-zookeeper:${KAFKA_VERSION:-latest}
+    hostname: zookeeper
+    healthcheck:
+      test: nc -z localhost 2181 || exit -1
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    ports:
+      - "2181:2181"
+    environment:
+      ZOOKEEPER_SERVER_ID: 1
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+      ZOOKEEPER_INIT_LIMIT: 5
+      ZOOKEEPER_SYNC_LIMIT: 2
+      ZOOKEEPER_SERVERS: zookeeper:2888:3888
+      KAFKA_OPTS: "-Dzookeeper.4lw.commands.whitelist=ruok"
+    volumes:
+      - "./volumes/zookeeper/data:/var/lib/zookeeper/data"
+      - "./volumes/zookeeper/transactions:/var/lib/zookeeper/log"
+    networks:
+      - ${GLOBAL_NETWORK:-kafka}
+  schema-registry:
+    image: apicurio/apicurio-registry-mem:${APICURIO_VERSION:-latest}
+    hostname: schema-registry
+    depends_on:
+      kafka-broker-1:
+        condition: service_healthy
+      kafka-broker-2:
+        condition: service_healthy
+      kafka-broker-3:
+        condition: service_healthy
+    ports:
+      - "8081:8080"
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: PLAINTEXT://kafka-broker-2:9092,LISTENER_LOCAL://localhost:29092
+    networks:
+      - ${GLOBAL_NETWORK:-kafka}
+  kafka-broker-1:
+    image: confluentinc/cp-kafka:${KAFKA_VERSION}
+    hostname: kafka-broker-1
+    depends_on:
+      zookeeper: 
+        condition: service_healthy
+    healthcheck:
+      test: kafka-topics --bootstrap-server kafka-broker-1:9092 --list
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    ports:
+      - "19092:19092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka-broker-1:9092,LISTENER_LOCAL://localhost:19092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,LISTENER_LOCAL:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 3
+      KAFKA_COMPRESSION_TYPE: producer
+    volumes:
+      - "./volumes/kafka/broker-1:/var/lib/kafka/data"
+    networks:
+      - ${GLOBAL_NETWORK:-kafka}
+  kafka-broker-2:
+    image: confluentinc/cp-kafka:${KAFKA_VERSION}
+    hostname: kafka-broker-2
+    depends_on:
+      zookeeper: 
+        condition: service_healthy
+    healthcheck:
+      test: kafka-topics --bootstrap-server kafka-broker-2:9092 --list
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    ports:
+      - "29092:29092"
+    environment:
+      KAFKA_BROKER_ID: 2
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka-broker-2:9092,LISTENER_LOCAL://localhost:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,LISTENER_LOCAL:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 3
+      KAFKA_COMPRESSION_TYPE: producer
+    volumes:
+      - "./volumes/kafka/broker-2:/var/lib/kafka/data"
+    networks:
+      - ${GLOBAL_NETWORK:-kafka}
+  kafka-broker-3:
+    image: confluentinc/cp-kafka:${KAFKA_VERSION}
+    hostname: kafka-broker-3
+    depends_on:
+      zookeeper: 
+        condition: service_healthy
+    healthcheck:
+      test: kafka-topics --bootstrap-server kafka-broker-3:9092 --list
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    ports:
+      - "39092:39092"
+    environment:
+      KAFKA_BROKER_ID: 3
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka-broker-3:9092,LISTENER_LOCAL://localhost:39092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,LISTENER_LOCAL:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 3
+      KAFKA_COMPRESSION_TYPE: producer
+    volumes:
+      - "./volumes/kafka/broker-3:/var/lib/kafka/data"
+    networks:
+      - ${GLOBAL_NETWORK:-kafka}
+  kafka-ui:
+    container_name: kafka-ui
+    image: provectuslabs/kafka-ui:latest
+    ports:
+      - "9000:8080"
+    environment:
+      ZK_HOSTS: "zookeeper:2181"
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka-broker-1:9092,kafka-broker-2:9092,kafka-broker-3:9092
+    networks:
+      - ${GLOBAL_NETWORK:-kafka}
+  debezium:
+    image: quay.io/debezium/connect:2.2
+    environment:
+      BOOTSTRAP_SERVERS: kafka-broker-1:9092,kafka-broker-2:9092,kafka-broker-3:9092
+      GROUP_ID: 1
+      CONFIG_STORAGE_TOPIC: connect_configs
+      OFFSET_STORAGE_TOPIC: connect_offsets
+      CONNECT_VALUE_CONVERTER: io.apicurio.registry.utils.converter.AvroConverter
+      CONNECT_VALUE_CONVERTER_APICURIO_REGISTRY_URL: http://schema-registry:8081/apis/registry/v2
+      CONNECT_VALUE_CONVERTER_APICURIO_REGISTRY_AUTO-REGISTER: true
+      CONNECT_VALUE_CONVERTER_APICURIO_REGISTRY_FIND-LATEST: true
+      CONNECT_SCHEMA_NAME_ADJUSTMENT_MODE: avro
+    depends_on:
+      kafka-broker-1:
+        condition: service_healthy
+      kafka-broker-2:
+        condition: service_healthy
+      kafka-broker-3:
+        condition: service_healthy
+    ports:
+      - "8083:8083"
+    networks:
+      - ${GLOBAL_NETWORK:-kafka}
+  postgres:
+    container_name: postgres
+    hostname: postgres
+    image: quay.io/debezium/example-postgres:2.2
+    restart: always
+    environment:
+        - POSTGRES_DB=postgres
+        - POSTGRES_USER=postgres
+        - POSTGRES_PASSWORD=postgres
+    ports:
+        - '5432:5432'
+    volumes:
+        - postgres:/var/lib/postgresql/data
+    networks:
+      - ${GLOBAL_NETWORK:-kafka}
+
+volumes:
+    postgres: {}      
+
+networks:
+  online-portal:
+    driver: bridge
